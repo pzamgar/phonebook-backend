@@ -28,23 +28,32 @@ app.get("/api/info", (req, res) => {
   });
 });
 
-app.get("/api/persons", (req, res) => {
-  Person.find({}).then(persons => {
-    res.json(persons.map(p => p.toJSON()));
-  });
+app.get("/api/persons", (req, res, next) => {
+  Person.find({})
+    .then(persons => {
+      res.json(persons.map(person => person.toJSON()));
+    })
+    .catch(error => next(error));
 });
 
-app.get("/api/persons/:id", (request, response) => {
-  Person.findById(request.params.id).then(p => {
-    response.json(p.toJSON());
-  });
+app.get("/api/persons/:id", (request, response, next) => {
+  Person.findById(request.params.id)
+    .then(person => {
+      if (person) {
+        response.json(person.toJSON());
+      } else {
+        response.status(404).end();
+      }
+    })
+    .catch(error => next(error));
 });
 
-app.delete("/api/persons/:id", (request, response) => {
-  Person.findByIdAndRemove(request.params.id, (err, todo) => {
-    if (err) return res.status(500).send(err);
-    response.status(204).end();
-  });
+app.delete("/api/persons/:id", (request, response, next) => {
+  Person.findByIdAndRemove(request.params.id)
+    .then(result => {
+      response.status(204).end();
+    })
+    .catch(error => next(error));
 });
 
 const validateBodyPerson = (body, response) => {
@@ -57,7 +66,7 @@ const validateBodyPerson = (body, response) => {
   }
 };
 
-app.post("/api/persons", (request, response) => {
+app.post("/api/persons", (request, response, next) => {
   const body = request.body;
 
   const error = validateBodyPerson(body, response);
@@ -71,9 +80,32 @@ app.post("/api/persons", (request, response) => {
     phone: body.phone
   });
 
-  person.save().then(savedPerson => {
-    response.json(savedPerson.toJSON());
-  });
+  person
+    .save()
+    .then(savedPerson => {
+      response.json(savedPerson.toJSON());
+    })
+    .catch(error => next(error));
+});
+
+app.put("/api/persons/:id", (request, response, next) => {
+  console.log("request", request.body);
+  const body = request.body;
+
+  const person = {
+    name: body.name,
+    phone: body.phone
+  };
+
+  Person.findByIdAndUpdate(request.params.id, person, { new: true })
+    .then(updatePerson => {
+      if (updatePerson) {
+        response.json(updatePerson.toJSON());
+      } else {
+        response.status(404).end();
+      }
+    })
+    .catch(error => next(error));
 });
 
 const unknownEndpoint = (request, response) => {
@@ -81,6 +113,18 @@ const unknownEndpoint = (request, response) => {
 };
 
 app.use(unknownEndpoint);
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === "CastError" && error.kind == "ObjectId") {
+    return response.status(400).send({ error: "malformatted id" });
+  }
+
+  next(error);
+};
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {
